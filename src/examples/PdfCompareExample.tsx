@@ -1,4 +1,5 @@
 import { FileRenderer } from "../FileRenderer"
+import { Card, CardContent } from "../components/ui/card"
 import { Document, Page, pdfjs } from "react-pdf"
 
 import "react-pdf/dist/Page/AnnotationLayer.css"
@@ -24,14 +25,16 @@ export function PdfCompareExample({ source }: PdfCompareExampleProps) {
 
       <div>
         <h3 className="mb-2 text-sm font-semibold">Default react-pdf baseline</h3>
-        <div className="rounded-md border bg-white p-3">
-          <div className="max-h-[80vh] overflow-auto rounded-md border bg-gray-50 p-3">
-            <Document file={source} loading={<div className="p-4 text-sm">Loading PDF...</div>}>
-              <Page pageNumber={1} width={900} renderTextLayer renderAnnotationLayer />
-            </Document>
-          </div>
+          <Card className="rounded-md shadow-none">
+            <CardContent className="p-3">
+            <div className="max-h-[80vh] overflow-auto rounded-md border bg-gray-50 p-3">
+              <Document file={source} loading={<div className="p-4 text-sm">Loading PDF...</div>}>
+                <Page pageNumber={1} width={900} renderTextLayer renderAnnotationLayer />
+              </Document>
+            </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
-    </div>
   )
 }
