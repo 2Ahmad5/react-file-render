@@ -28,6 +28,7 @@
     "react-dom": ">=18"
   },
   "dependencies": {
+    "docx-preview": "^0.3.7",
     "lucide-react": "^1.14.0",
     "pdfjs-dist": "^4.8.69",
     "react-pdf": "^9.1.1",

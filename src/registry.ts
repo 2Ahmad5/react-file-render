@@ -5,7 +5,7 @@ import { ImageRenderer } from "./renderers/image/ImageRenderer"
 import { PdfRenderer } from "./renderers/pdf/PdfRenderer"
 import { VideoRenderer } from "./renderers/video/VideoRenderer"
 
-type RendererMap = Record<SupportedFileType, ComponentType<BaseRendererProps>>
+type RendererMap = Partial<Record<SupportedFileType, ComponentType<BaseRendererProps>>>
 
 export const rendererRegistry: RendererMap = {
   pdf: PdfRenderer,
@@ -14,5 +14,6 @@ export const rendererRegistry: RendererMap = {
   jpg: ImageRenderer,
   jpeg: ImageRenderer,
   png: ImageRenderer,
+  avif: ImageRenderer,
   video: VideoRenderer,
 }

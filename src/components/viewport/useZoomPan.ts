@@ -1,4 +1,4 @@
-import { useRef, useState, type PointerEvent, type WheelEvent } from "react"
+import { useCallback, useEffect, useRef, useState, type PointerEvent, type WheelEvent } from "react"
 
 export type PanOffset = {
   x: number
@@ -27,6 +27,7 @@ export function useZoomPan({ minZoom = 0.75, maxZoom = 2.5 }: UseZoomPanOptions 
   const [zoom, setZoom] = useState(1)
   const [panOffset, setPanOffset] = useState<PanOffset>({ x: 0, y: 0 })
   const viewportRef = useRef<HTMLDivElement | null>(null)
+  const [viewportElement, setViewportElement] = useState<HTMLDivElement | null>(null)
   const activePointersRef = useRef<Map<number, PointerPoint>>(new Map())
   const dragStartRef = useRef<{ pointerId: number; x: number; y: number; pan: PanOffset } | null>(null)
   const pinchStartRef = useRef<{ distance: number; zoom: number } | null>(null)
@@ -35,6 +36,11 @@ export function useZoomPan({ minZoom = 0.75, maxZoom = 2.5 }: UseZoomPanOptions 
     setZoom(1)
     setPanOffset({ x: 0, y: 0 })
   }
+
+  const setViewportRef = useCallback((node: HTMLDivElement | null) => {
+    viewportRef.current = node
+    setViewportElement(node)
+  }, [])
 
   function onWheel(event: WheelEvent<HTMLDivElement>) {
     if (!event.ctrlKey) {
@@ -113,8 +119,32 @@ export function useZoomPan({ minZoom = 0.75, maxZoom = 2.5 }: UseZoomPanOptions 
     }
   }
 
+  useEffect(() => {
+    const viewport = viewportElement
+    if (!viewport) {
+      return
+    }
+
+    function preventViewportGesture(event: Event) {
+      event.preventDefault()
+    }
+
+    viewport.addEventListener("wheel", preventViewportGesture, { passive: false })
+    viewport.addEventListener("gesturestart", preventViewportGesture, { passive: false })
+    viewport.addEventListener("gesturechange", preventViewportGesture, { passive: false })
+    viewport.addEventListener("gestureend", preventViewportGesture, { passive: false })
+
+    return () => {
+      viewport.removeEventListener("wheel", preventViewportGesture)
+      viewport.removeEventListener("gesturestart", preventViewportGesture)
+      viewport.removeEventListener("gesturechange", preventViewportGesture)
+      viewport.removeEventListener("gestureend", preventViewportGesture)
+    }
+  }, [viewportElement])
+
   return {
     viewportRef,
+    setViewportRef,
     zoom,
     panOffset,
     setPanOffset,

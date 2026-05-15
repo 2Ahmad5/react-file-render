@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type WheelEvent } from "react"
 import { Document, Page, pdfjs } from "react-pdf"
 import { createWorker } from "tesseract.js"
 import { ViewerOverlayControls } from "../../components/ViewerOverlayControls"
+import { getDocumentWidth, getScaledPageSize, type Size } from "../../components/document/documentSizing"
 import {
   buildPagedItemMatches,
   buildPagedTextMatches,
@@ -9,8 +10,8 @@ import {
   type PagedTextSearchMatch,
 } from "../../components/highlights/pagedTextSearch"
 import { usePagedNavigation } from "../../components/pages/usePagedNavigation"
-import { Alert } from "../../components/ui/alert"
 import { Card } from "../../components/ui/card"
+import { useElementSize } from "../../components/viewport/useElementSize"
 import { useZoomPan } from "../../components/viewport/useZoomPan"
 import type { BaseRendererProps } from "../../types"
 
@@ -23,10 +24,7 @@ type LoadSuccessData = {
   numPages: number
 }
 
-type PdfPageSize = {
-  width: number
-  height: number
-}
+type PdfPageSize = Size
 
 type PdfTextContent = {
   items?: unknown[]
@@ -65,13 +63,12 @@ export function PdfRenderer({ source, options }: BaseRendererProps) {
   const [pageTextMap, setPageTextMap] = useState<Record<number, string>>({})
   const [textLayerVersion, setTextLayerVersion] = useState(0)
   const [activeMatchIndex, setActiveMatchIndex] = useState(-1)
-  const [viewportSize, setViewportSize] = useState<PdfPageSize | null>(null)
   const [pageSize, setPageSize] = useState<PdfPageSize | null>(null)
   const [ocrStatus, setOcrStatus] = useState<OcrStatus>("idle")
   const [ocrPage, setOcrPage] = useState(0)
   const [ocrWordMap, setOcrWordMap] = useState<Record<number, OcrWordBox[]>>({})
-  const viewportRef = useRef<HTMLDivElement | null>(null)
   const textLoadIdRef = useRef(0)
+  const viewport = useElementSize<HTMLDivElement>()
   const zoomPan = useZoomPan()
 
   const allowDownload = options?.allowDownload ?? false
@@ -79,6 +76,7 @@ export function PdfRenderer({ source, options }: BaseRendererProps) {
   const slotClasses = options?.slotClasses
   const theme = options?.theme ?? "light"
   const isDark = theme === "dark"
+  const documentSize = options?.documentSize ?? "normal"
   const pagedNavigation = usePagedNavigation({ totalPages: numPages })
   const currentPage = pagedNavigation.currentPage
 
@@ -212,11 +210,11 @@ export function PdfRenderer({ source, options }: BaseRendererProps) {
   }
 
   function paintMatches(nextActiveIndex: number) {
-    if (!viewportRef.current) {
+    if (!viewport.elementRef.current) {
       return
     }
 
-    const marks = Array.from(viewportRef.current.querySelectorAll("mark.rf-pdf-match")) as HTMLElement[]
+    const marks = Array.from(viewport.elementRef.current.querySelectorAll("mark.rf-pdf-match")) as HTMLElement[]
 
     marks.forEach((mark, index) => {
       if (index === nextActiveIndex) {
@@ -258,16 +256,16 @@ export function PdfRenderer({ source, options }: BaseRendererProps) {
   }
 
   function paintOcrMatch(matchIndex: number) {
-    if (!viewportRef.current) {
+    if (!viewport.elementRef.current) {
       return
     }
 
-    const marks = Array.from(viewportRef.current.querySelectorAll("[data-rf-ocr-match]")) as HTMLElement[]
+    const marks = Array.from(viewport.elementRef.current.querySelectorAll("[data-rf-ocr-match]")) as HTMLElement[]
     marks.forEach((mark) => {
       mark.className = "absolute rounded-sm bg-amber-200/70 mix-blend-multiply"
     })
 
-    const activeMark = viewportRef.current.querySelector(`[data-rf-ocr-match="${matchIndex}"]`) as HTMLElement | null
+    const activeMark = viewport.elementRef.current.querySelector(`[data-rf-ocr-match="${matchIndex}"]`) as HTMLElement | null
     if (activeMark) {
       activeMark.className = "absolute rounded-sm bg-rose-300/75 mix-blend-multiply"
       centerElementIfNeeded(activeMark)
@@ -299,7 +297,7 @@ export function PdfRenderer({ source, options }: BaseRendererProps) {
       return
     }
 
-    const pageStride = Math.max((renderedPageSize?.height ?? viewportSize?.height ?? 700) + 24, 1)
+    const pageStride = Math.max((renderedPageSize?.height ?? viewport.size?.height ?? 700) + 24, 1)
     setActiveMatchIndex(-1)
     pagedNavigation.scrollBy(event.deltaY, pageStride)
   }
@@ -370,34 +368,6 @@ export function PdfRenderer({ source, options }: BaseRendererProps) {
   }
 
   useEffect(() => {
-    const viewport = viewportRef.current
-    if (!viewport) {
-      return
-    }
-
-    function stopViewportWheel(event: globalThis.WheelEvent) {
-      event.preventDefault()
-    }
-
-    function updateViewportSize() {
-      if (!viewport) {
-        return
-      }
-      setViewportSize({ width: viewport.clientWidth, height: viewport.clientHeight })
-    }
-
-    updateViewportSize()
-    const observer = new ResizeObserver(updateViewportSize)
-    observer.observe(viewport)
-    viewport.addEventListener("wheel", stopViewportWheel, { passive: false })
-
-    return () => {
-      observer.disconnect()
-      viewport.removeEventListener("wheel", stopViewportWheel)
-    }
-  }, [])
-
-  useEffect(() => {
     if (!searchQuery.trim()) {
       setActiveMatchIndex(-1)
       return
@@ -429,19 +399,19 @@ export function PdfRenderer({ source, options }: BaseRendererProps) {
     let attempts = 0
 
     const tryActivateFirstMatch = () => {
-      if (cancelled || !viewportRef.current) {
+      if (cancelled || !viewport.elementRef.current) {
         return
       }
 
       if (activeMatch.source === "ocr") {
-        const activeOcrMark = viewportRef.current.querySelector(`[data-rf-ocr-match="${normalizedActiveIndex}"]`)
+        const activeOcrMark = viewport.elementRef.current.querySelector(`[data-rf-ocr-match="${normalizedActiveIndex}"]`)
         if (activeOcrMark) {
           paintOcrMatch(normalizedActiveIndex)
           return
         }
       }
 
-      const marks = Array.from(viewportRef.current.querySelectorAll("mark.rf-pdf-match")) as HTMLElement[]
+      const marks = Array.from(viewport.elementRef.current.querySelectorAll("mark.rf-pdf-match")) as HTMLElement[]
       if (activeMatch.source === "pdf" && marks.length > activeMatch.pageMatchIndex) {
         paintMatches(activeMatch.pageMatchIndex)
         return
@@ -463,47 +433,12 @@ export function PdfRenderer({ source, options }: BaseRendererProps) {
     }
   }, [searchQuery, numPages, textLayerVersion, globalMatches, currentPage, activeMatchIndex])
 
-  const searchActive = searchQuery.trim().length > 0
   const searchablePageCount = Object.values(pagesWithText).filter(Boolean).length
-  const ocrHint = (() => {
-    if (!allowSearch || numPages === 0) {
-      return null
-    }
-
-    if (ocrStatus === "running") {
-      return `No selectable PDF text found. Running OCR fallback${ocrPage > 0 ? ` on page ${ocrPage}/${numPages}` : ""}...`
-    }
-
-    if (ocrStatus === "error" && searchActive) {
-      return "This PDF appears scanned, and OCR failed. Search may not work for this file."
-    }
-
-    if (ocrStatus === "done" && searchActive && searchablePageCount === 0) {
-      return "OCR finished, but no searchable text was found in this PDF."
-    }
-
-    return null
-  })()
-  const pageScale = useMemo(() => {
-    if (!viewportSize || !pageSize) {
-      return undefined
-    }
-
-    const availableWidth = Math.max(viewportSize.width - 24, 1)
-    const availableHeight = Math.max(viewportSize.height - 48, 1)
-    return Math.min(availableWidth / pageSize.width, availableHeight / pageSize.height)
-  }, [pageSize, viewportSize])
-  const renderedPageSize = useMemo(() => {
-    if (!pageSize || !pageScale) {
-      return undefined
-    }
-
-    return {
-      width: pageSize.width * pageScale,
-      height: pageSize.height * pageScale,
-    }
-  }, [pageScale, pageSize])
-  const renderedPageGap = 24
+  const searchDisabled = allowSearch && numPages > 0 && (ocrStatus === "error" || (ocrStatus === "done" && searchablePageCount === 0))
+  const pageScale = pageSize ? getDocumentWidth(documentSize) / pageSize.width : undefined
+  const renderedPageSize = useMemo(() => getScaledPageSize(pageSize, documentSize), [documentSize, pageSize])
+  const renderedPageGap = 0
+  const controlsCompact = renderedPageSize.width < 560 || renderedPageSize.height < 460
 
   const currentPageOcrHighlights = globalMatches
     .map((match, matchIndex) => ({ ...match, matchIndex }))
@@ -515,15 +450,25 @@ export function PdfRenderer({ source, options }: BaseRendererProps) {
         slotClasses?.container ??
         options?.className ??
         (isDark
-          ? "group relative rounded-lg border border-neutral-700 bg-neutral-800 text-neutral-100 shadow-sm"
-          : "group relative rounded-lg border border-slate-200 bg-white text-slate-950 shadow-sm")
+          ? "group relative overflow-hidden rounded-lg border border-neutral-700 bg-neutral-800 text-neutral-100 shadow-sm"
+          : "group relative overflow-hidden rounded-lg border border-slate-200 bg-white text-slate-950 shadow-sm")
+      }
+      style={
+        slotClasses?.container || options?.className
+          ? undefined
+          : {
+              width: renderedPageSize.width,
+              height: renderedPageSize.height,
+            }
       }
     >
       <ViewerOverlayControls
         source={source}
         theme={theme}
+        compact={controlsCompact}
         showDownload={allowDownload}
         showSearch={allowSearch}
+        searchDisabled={searchDisabled}
         iconButtonClassName={slotClasses?.iconButton}
         searchInputClassName={slotClasses?.searchInput}
         searchValue={searchQuery}
@@ -537,6 +482,7 @@ export function PdfRenderer({ source, options }: BaseRendererProps) {
         resetDisabled={zoomPan.isViewReset}
         onReset={zoomPan.resetView}
         showPagination={numPages > 1}
+        paginationPlacement="left-center"
         currentPage={currentPage}
         totalPages={numPages}
         onPreviousPage={() => {
@@ -551,19 +497,14 @@ export function PdfRenderer({ source, options }: BaseRendererProps) {
       />
 
       <div
-        ref={viewportRef}
+        ref={viewport.setElementRef}
         className={
           slotClasses?.viewport ??
           (isDark
-            ? "h-[80vh] max-h-[80vh] touch-none overscroll-contain overflow-hidden rounded-lg bg-neutral-700 p-4"
-            : "h-[80vh] max-h-[80vh] touch-none overscroll-contain overflow-hidden rounded-lg bg-slate-100 p-4")
+            ? "h-full w-full touch-none overscroll-contain overflow-hidden rounded-lg bg-neutral-800"
+            : "h-full w-full touch-none overscroll-contain overflow-hidden rounded-lg bg-white")
         }
       >
-        {ocrHint ? (
-          <Alert variant="warning" className="mb-3 rounded-md px-3 py-2 text-xs">
-            {ocrHint}
-          </Alert>
-        ) : null}
         <Document
           file={source}
           onLoadSuccess={onLoadSuccess}
@@ -573,7 +514,7 @@ export function PdfRenderer({ source, options }: BaseRendererProps) {
           {numPages > 0 ? (
             <div className="relative flex h-full items-center justify-center">
               <div
-                ref={zoomPan.viewportRef}
+                ref={zoomPan.setViewportRef}
                 className="relative h-full w-full touch-none overflow-hidden cursor-grab active:cursor-grabbing"
                 {...zoomPan.handlers}
                 onWheel={onCanvasWheel}
