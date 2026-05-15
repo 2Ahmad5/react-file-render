@@ -43,19 +43,19 @@ export default function App() {
           <h2 className="mb-2 text-sm font-semibold">Basic react-pdf</h2>
           <Card className="rounded-md shadow-none">
             <CardContent className="p-3">
-            <div className="max-h-[80vh] overflow-auto rounded-md border bg-slate-50 p-3">
-              <Document
-                file={source}
-                loading={<div className="p-3 text-sm">Loading PDF...</div>}
-              >
-                <Page
-                  pageNumber={1}
-                  width={900}
-                  renderTextLayer
-                  renderAnnotationLayer
-                />
-              </Document>
-            </div>
+              <div className="max-h-[80vh] overflow-auto rounded-md border bg-slate-50 p-3">
+                <Document
+                  file={source}
+                  loading={<div className="p-3 text-sm">Loading PDF...</div>}
+                >
+                  <Page
+                    pageNumber={1}
+                    width={900}
+                    renderTextLayer
+                    renderAnnotationLayer
+                  />
+                </Document>
+              </div>
             </CardContent>
           </Card>
         </div>

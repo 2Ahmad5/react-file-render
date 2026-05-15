@@ -6,6 +6,7 @@ import { Input } from "./ui/input"
 
 type ViewerOverlayControlsProps = {
   source: string
+  theme?: "light" | "dark"
   showDownload: boolean
   showSearch: boolean
   iconButtonClassName?: string
@@ -27,6 +28,7 @@ type ViewerOverlayControlsProps = {
 
 export function ViewerOverlayControls({
   source,
+  theme = "light",
   showDownload,
   showSearch,
   iconButtonClassName,
@@ -76,8 +78,11 @@ export function ViewerOverlayControls({
   const effectiveSearchValue = searchValue ?? localSearchValue
   const canGoBack = currentPage > 1
   const canGoForward = totalPages > 0 && currentPage < totalPages
-  const pageButtonClassName =
-    "!h-7 !w-7 rounded-full text-slate-600 hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-35"
+  const isDark = theme === "dark"
+  const pageButtonClassName = cn(
+    "!h-7 !w-7 rounded-full disabled:cursor-not-allowed disabled:opacity-35",
+    isDark ? "text-neutral-200 hover:bg-neutral-600/80 hover:text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+  )
 
   useEffect(() => {
     if (!searchOpen) {
@@ -107,7 +112,11 @@ export function ViewerOverlayControls({
         {showSearch ? (
           <div
             ref={searchRef}
-            className={`pointer-events-auto relative h-10 overflow-hidden rounded-full border border-slate-300 bg-white/95 text-slate-700 shadow-sm backdrop-blur transition-all duration-250 ease-out ${searchOpen ? "w-64" : "w-10"}`}
+            className={cn(
+              "pointer-events-auto relative h-10 overflow-hidden rounded-full border shadow-sm backdrop-blur transition-all duration-250 ease-out",
+              searchOpen ? "w-64" : "w-10",
+              isDark ? "border-neutral-500 bg-neutral-700/95 text-neutral-100" : "border-slate-300 bg-white/95 text-slate-700",
+            )}
           >
             <Button
               type="button"
@@ -116,7 +125,10 @@ export function ViewerOverlayControls({
               onClick={() => setSearchOpen((prev) => !prev)}
               className={
                 iconButtonClassName ??
-                "absolute left-1 top-1 !h-8 !w-8 rounded-full bg-transparent p-0 leading-none text-slate-700 hover:bg-transparent hover:text-slate-900"
+                cn(
+                  "absolute left-1 top-1 !h-8 !w-8 rounded-full bg-transparent p-0 leading-none hover:bg-transparent",
+                  isDark ? "text-neutral-200 hover:text-white" : "text-slate-700 hover:text-slate-900",
+                )
               }
               aria-label="Toggle search"
             >
@@ -135,13 +147,14 @@ export function ViewerOverlayControls({
               }}
               placeholder="Search"
               className={cn(
-                "h-full w-full rounded-full border-0 bg-transparent pl-11 pr-14 text-sm text-slate-800 shadow-none outline-none transition-opacity duration-150 focus-visible:ring-0",
+                "h-full w-full rounded-full !border-0 bg-transparent pl-11 pr-14 text-sm shadow-none outline-none transition-opacity duration-150 focus-visible:ring-0",
+                isDark ? "!text-neutral-100 placeholder:text-neutral-400" : "!text-slate-800 placeholder:text-slate-400",
                 searchOpen ? "opacity-100" : "pointer-events-none opacity-0",
                 searchInputClassName,
               )}
             />
             {searchOpen ? (
-              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-500">
+              <span className={cn("pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs", isDark ? "text-neutral-400" : "text-slate-500")}>
                 {searchCounterText ?? "0/0"}
               </span>
             ) : null}
@@ -155,7 +168,12 @@ export function ViewerOverlayControls({
             size="icon"
             onClick={onReset}
             disabled={resetDisabled}
-            className="pointer-events-auto !h-10 !w-10 rounded-full border-slate-300 bg-white/95 text-slate-700 backdrop-blur hover:bg-white/95 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
+            className={cn(
+              "pointer-events-auto !h-10 !w-10 rounded-full backdrop-blur disabled:cursor-not-allowed disabled:opacity-40",
+              isDark
+                ? "!border-neutral-500 !bg-neutral-700/95 !text-neutral-100 hover:!bg-neutral-600 hover:!text-white"
+                : "border-slate-300 bg-white/95 text-slate-700 hover:bg-white/95 hover:text-slate-900",
+            )}
             aria-label="Reset view"
           >
             <ScanSearch className="h-5 w-5" strokeWidth={2} />
@@ -168,7 +186,10 @@ export function ViewerOverlayControls({
             download
             className={cn(
               buttonVariants({ variant: "outline", size: "icon" }),
-              "pointer-events-auto !h-10 !w-10 rounded-full border-slate-300 bg-white/95 text-slate-700 backdrop-blur hover:bg-white/95 hover:text-slate-900",
+              "pointer-events-auto !h-10 !w-10 rounded-full backdrop-blur",
+              isDark
+                ? "!border-neutral-500 !bg-neutral-700/95 !text-neutral-100 hover:!bg-neutral-600 hover:!text-white"
+                : "border-slate-300 bg-white/95 text-slate-700 hover:bg-white/95 hover:text-slate-900",
             )}
             aria-label="Download file"
           >
@@ -178,7 +199,12 @@ export function ViewerOverlayControls({
       </div>
 
       {showPagination && totalPages > 0 ? (
-        <div className="pointer-events-auto absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border border-slate-200 bg-white/95 px-2 py-1 text-xs text-slate-700 shadow-sm backdrop-blur">
+        <div
+          className={cn(
+            "pointer-events-auto absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border px-2 py-1 text-xs opacity-0 shadow-sm backdrop-blur transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100",
+            isDark ? "border-neutral-500 bg-neutral-700/95 text-neutral-100" : "border-slate-200 bg-white/95 text-slate-700",
+          )}
+        >
           <Button
             type="button"
             variant="ghost"
@@ -209,7 +235,12 @@ export function ViewerOverlayControls({
                   setPageInputOpen(false)
                 }
               }}
-              className="!h-6 !w-14 rounded-md border-slate-200 bg-white px-1 text-center font-medium tabular-nums text-slate-700 shadow-none focus:border-slate-400 focus-visible:ring-0"
+              className={cn(
+                "!h-6 !w-14 rounded-md px-1 text-center font-medium tabular-nums shadow-none focus-visible:ring-0",
+                isDark
+                  ? "!border-neutral-500 !bg-neutral-600 !text-neutral-100 focus:!border-neutral-400"
+                  : "border-slate-200 bg-white text-slate-700 focus:border-slate-400",
+              )}
               aria-label="Go to page"
             />
           ) : (
@@ -218,7 +249,10 @@ export function ViewerOverlayControls({
               variant="ghost"
               size="sm"
               onDoubleClick={openPageInput}
-              className="!h-6 !w-14 rounded-md px-0 text-center font-medium tabular-nums text-slate-700 hover:bg-slate-100"
+              className={cn(
+                "!h-6 !w-14 rounded-md px-0 text-center font-medium tabular-nums",
+                isDark ? "text-neutral-100 hover:bg-neutral-600/80 hover:text-white" : "text-slate-700 hover:bg-slate-100",
+              )}
               aria-label="Double click to enter page number"
             >
               {currentPage}/{totalPages}

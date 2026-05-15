@@ -11,5 +11,8 @@ export const rendererRegistry: RendererMap = {
   pdf: PdfRenderer,
   docx: DocxRenderer,
   image: ImageRenderer,
+  jpg: ImageRenderer,
+  jpeg: ImageRenderer,
+  png: ImageRenderer,
   video: VideoRenderer,
 }

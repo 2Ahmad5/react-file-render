@@ -2,9 +2,16 @@ import { useEffect, useMemo, useRef, useState, type WheelEvent } from "react"
 import { Document, Page, pdfjs } from "react-pdf"
 import { createWorker } from "tesseract.js"
 import { ViewerOverlayControls } from "../../components/ViewerOverlayControls"
+import {
+  buildPagedItemMatches,
+  buildPagedTextMatches,
+  highlightSearchText,
+  type PagedTextSearchMatch,
+} from "../../components/highlights/pagedTextSearch"
+import { usePagedNavigation } from "../../components/pages/usePagedNavigation"
 import { Alert } from "../../components/ui/alert"
 import { Card } from "../../components/ui/card"
-import { useViewerCanvas } from "../../hooks/useViewerCanvas"
+import { useZoomPan } from "../../components/viewport/useZoomPan"
 import type { BaseRendererProps } from "../../types"
 
 import "react-pdf/dist/Page/AnnotationLayer.css"
@@ -35,12 +42,7 @@ type PdfDocumentProxy = LoadSuccessData & {
   getPage: (pageNumber: number) => Promise<PdfPageProxy>
 }
 
-type PdfSearchMatch = {
-  pageNumber: number
-  pageMatchIndex: number
-  source: "pdf" | "ocr"
-  ocrWordIndex?: number
-}
+type PdfSearchMatch = PagedTextSearchMatch<"pdf" | "ocr">
 
 type OcrStatus = "idle" | "running" | "done" | "error"
 
@@ -52,20 +54,12 @@ type OcrWordBox = {
   height: number
 }
 
-type PageSlideTransition = {
-  fromPage: number
-  toPage: number
-  direction: 1 | -1
-  duration: number
-}
-
 function getTextItemString(item: unknown) {
   return typeof item === "object" && item !== null && "str" in item && typeof item.str === "string" ? item.str : ""
 }
 
 export function PdfRenderer({ source, options }: BaseRendererProps) {
   const [numPages, setNumPages] = useState(0)
-  const [currentPage, setCurrentPage] = useState(1)
   const [searchQuery, setSearchQuery] = useState("")
   const [pagesWithText, setPagesWithText] = useState<Record<number, boolean>>({})
   const [pageTextMap, setPageTextMap] = useState<Record<number, string>>({})
@@ -76,20 +70,17 @@ export function PdfRenderer({ source, options }: BaseRendererProps) {
   const [ocrStatus, setOcrStatus] = useState<OcrStatus>("idle")
   const [ocrPage, setOcrPage] = useState(0)
   const [ocrWordMap, setOcrWordMap] = useState<Record<number, OcrWordBox[]>>({})
-  const [pageSlideTransition, setPageSlideTransition] = useState<PageSlideTransition | null>(null)
-  const [pageSlideActive, setPageSlideActive] = useState(false)
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const textLoadIdRef = useRef(0)
-  const horizontalWheelRef = useRef<{ delta: number; timer: ReturnType<typeof setTimeout> | null }>({
-    delta: 0,
-    timer: null,
-  })
-  const pageSlideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const { canvasRef, zoom, panOffset, setPanOffset, resetCanvasView, isCanvasReset, canvasHandlers } = useViewerCanvas()
+  const zoomPan = useZoomPan()
 
   const allowDownload = options?.allowDownload ?? false
   const allowSearch = options?.allowSearch ?? false
   const slotClasses = options?.slotClasses
+  const theme = options?.theme ?? "light"
+  const isDark = theme === "dark"
+  const pagedNavigation = usePagedNavigation({ totalPages: numPages })
+  const currentPage = pagedNavigation.currentPage
 
   function getTextFromContent(textContent: PdfTextContent) {
     return (textContent.items ?? [])
@@ -103,18 +94,16 @@ export function PdfRenderer({ source, options }: BaseRendererProps) {
     textLoadIdRef.current = loadId
 
     setNumPages(loadedPages)
-    setCurrentPage(1)
+    pagedNavigation.reset(1)
     setPagesWithText({})
     setPageTextMap({})
     setTextLayerVersion(0)
     setActiveMatchIndex(-1)
     setPageSize(null)
-    resetCanvasView()
+    zoomPan.resetView()
     setOcrStatus("idle")
     setOcrPage(0)
     setOcrWordMap({})
-    setPageSlideTransition(null)
-    setPageSlideActive(false)
 
     Promise.all(
       Array.from({ length: loadedPages }, async (_, index) => {
@@ -241,12 +230,12 @@ export function PdfRenderer({ source, options }: BaseRendererProps) {
   }
 
   function centerElementIfNeeded(element?: HTMLElement | null) {
-    if (!element || !canvasRef.current) {
+    if (!element || !zoomPan.viewportRef.current) {
       return
     }
 
     const markRect = element.getBoundingClientRect()
-    const canvasRect = canvasRef.current.getBoundingClientRect()
+    const canvasRect = zoomPan.viewportRef.current.getBoundingClientRect()
     const isVisible =
       markRect.left >= canvasRect.left &&
       markRect.right <= canvasRect.right &&
@@ -262,7 +251,7 @@ export function PdfRenderer({ source, options }: BaseRendererProps) {
     const canvasCenterX = canvasRect.left + canvasRect.width / 2
     const canvasCenterY = canvasRect.top + canvasRect.height / 2
 
-    setPanOffset((prev) => ({
+    zoomPan.setPanOffset((prev) => ({
       x: prev.x + canvasCenterX - markCenterX,
       y: prev.y + canvasCenterY - markCenterY,
     }))
@@ -293,70 +282,26 @@ export function PdfRenderer({ source, options }: BaseRendererProps) {
     activateMatch(activeMatchIndex < 0 ? 0 : activeMatchIndex + 1)
   }
 
-  function changePage(nextPage: number, direction?: 1 | -1, wheelVelocity = 0) {
-    const boundedPage = Math.min(Math.max(nextPage, 1), numPages)
-    if (boundedPage === currentPage || pageSlideTransition) {
-      return
-    }
-
+  function changePage(nextPage: number) {
     setActiveMatchIndex(-1)
-
-    const slideDirection = direction ?? (boundedPage > currentPage ? 1 : -1)
-    const duration = Math.round(Math.min(Math.max(420 - Math.abs(wheelVelocity) * 1.4, 180), 360))
-
-    if (pageSlideTimerRef.current) {
-      clearTimeout(pageSlideTimerRef.current)
-    }
-
-    setPageSlideTransition({
-      fromPage: currentPage,
-      toPage: boundedPage,
-      direction: slideDirection,
-      duration,
-    })
-    setPageSlideActive(false)
-    setCurrentPage(boundedPage)
-
-    requestAnimationFrame(() => {
-      setPageSlideActive(true)
-    })
-
-    pageSlideTimerRef.current = setTimeout(() => {
-      setPageSlideTransition(null)
-      setPageSlideActive(false)
-      pageSlideTimerRef.current = null
-    }, duration)
+    pagedNavigation.goToPage(nextPage)
   }
 
   function onCanvasWheel(event: WheelEvent<HTMLDivElement>) {
-    const horizontalIntent = Math.abs(event.deltaX) > Math.abs(event.deltaY) * 1.15 && Math.abs(event.deltaX) > 4
-
-    if (horizontalIntent && numPages > 1) {
-      event.preventDefault()
-
-      if (horizontalWheelRef.current.timer) {
-        clearTimeout(horizontalWheelRef.current.timer)
-      }
-
-      horizontalWheelRef.current.delta += event.deltaX
-      const wheelDelta = horizontalWheelRef.current.delta
-      const wheelThreshold = 72
-
-      if (Math.abs(wheelDelta) >= wheelThreshold) {
-        const direction = wheelDelta > 0 ? 1 : -1
-        horizontalWheelRef.current.delta = 0
-        changePage(currentPage + direction, direction, Math.abs(wheelDelta))
-        return
-      }
-
-      horizontalWheelRef.current.timer = setTimeout(() => {
-        horizontalWheelRef.current.delta = 0
-        horizontalWheelRef.current.timer = null
-      }, 140)
+    if (event.ctrlKey) {
+      zoomPan.handlers.onWheel(event)
       return
     }
 
-    canvasHandlers.onWheel(event)
+    event.preventDefault()
+
+    if (numPages <= 1) {
+      return
+    }
+
+    const pageStride = Math.max((renderedPageSize?.height ?? viewportSize?.height ?? 700) + 24, 1)
+    setActiveMatchIndex(-1)
+    pagedNavigation.scrollBy(event.deltaY, pageStride)
   }
 
   function onPageTextSuccess(pageNumber: number, textContent: PdfTextContent) {
@@ -386,57 +331,20 @@ export function PdfRenderer({ source, options }: BaseRendererProps) {
     setTextLayerVersion((prev) => prev + 1)
   }
 
-  function pdfSearch(text: string, query: string) {
-    const normalizedQuery = query.trim()
-    if (!normalizedQuery) {
-      return text
-    }
-
-    const escapedQuery = normalizedQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-    const searchPattern = new RegExp(`(${escapedQuery})`, "gi")
-
-    return text.replace(
-      searchPattern,
-      '<mark class="rf-pdf-match rounded-sm bg-amber-200 text-slate-900">$1</mark>',
-    )
-  }
-
   const customTextRenderer = useMemo(
-    () => (textItem: { str: string }) => pdfSearch(textItem.str, searchQuery),
+    () => (textItem: { str: string }) =>
+      highlightSearchText(textItem.str, searchQuery, "rf-pdf-match rounded-sm bg-amber-200 text-slate-900"),
     [searchQuery],
   )
 
   const globalMatches = useMemo<PdfSearchMatch[]>(() => {
-    const normalizedQuery = searchQuery.trim()
-    if (!normalizedQuery) {
-      return []
-    }
-
-    const ocrMatches = Object.entries(ocrWordMap)
-      .map(([page, words]) => ({ pageNumber: Number(page), words }))
-      .sort((a, b) => a.pageNumber - b.pageNumber)
-      .flatMap(({ pageNumber, words }) =>
-        words.flatMap((word, wordIndex) =>
-          word.text.toLowerCase().includes(normalizedQuery.toLowerCase())
-            ? [{ pageNumber, pageMatchIndex: wordIndex, source: "ocr" as const, ocrWordIndex: wordIndex }]
-            : [],
-        ),
-      )
+    const ocrMatches = buildPagedItemMatches(ocrWordMap, searchQuery, "ocr")
 
     if (ocrMatches.length > 0) {
       return ocrMatches
     }
 
-    const escapedQuery = normalizedQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-    const searchPattern = new RegExp(escapedQuery, "gi")
-
-    return Object.entries(pageTextMap)
-      .map(([page, text]) => ({ pageNumber: Number(page), text }))
-      .sort((a, b) => a.pageNumber - b.pageNumber)
-      .flatMap(({ pageNumber, text }) => {
-        const matches = Array.from(text.matchAll(searchPattern))
-        return matches.map((_, pageMatchIndex) => ({ pageNumber, pageMatchIndex, source: "pdf" as const }))
-      })
+    return buildPagedTextMatches(pageTextMap, searchQuery, "pdf")
   }, [ocrWordMap, pageTextMap, searchQuery])
 
   function activateMatch(nextIndex: number) {
@@ -450,7 +358,7 @@ export function PdfRenderer({ source, options }: BaseRendererProps) {
     setActiveMatchIndex(normalizedIndex)
 
     if (match.pageNumber !== currentPage) {
-      setCurrentPage(match.pageNumber)
+      pagedNavigation.reset(match.pageNumber)
       return
     }
 
@@ -467,6 +375,10 @@ export function PdfRenderer({ source, options }: BaseRendererProps) {
       return
     }
 
+    function stopViewportWheel(event: globalThis.WheelEvent) {
+      event.preventDefault()
+    }
+
     function updateViewportSize() {
       if (!viewport) {
         return
@@ -477,18 +389,11 @@ export function PdfRenderer({ source, options }: BaseRendererProps) {
     updateViewportSize()
     const observer = new ResizeObserver(updateViewportSize)
     observer.observe(viewport)
+    viewport.addEventListener("wheel", stopViewportWheel, { passive: false })
 
-    return () => observer.disconnect()
-  }, [])
-
-  useEffect(() => {
     return () => {
-      if (horizontalWheelRef.current.timer) {
-        clearTimeout(horizontalWheelRef.current.timer)
-      }
-      if (pageSlideTimerRef.current) {
-        clearTimeout(pageSlideTimerRef.current)
-      }
+      observer.disconnect()
+      viewport.removeEventListener("wheel", stopViewportWheel)
     }
   }, [])
 
@@ -515,7 +420,7 @@ export function PdfRenderer({ source, options }: BaseRendererProps) {
     }
 
     if (activeMatch.pageNumber !== currentPage) {
-      setCurrentPage(activeMatch.pageNumber)
+      pagedNavigation.reset(activeMatch.pageNumber)
       return
     }
 
@@ -584,25 +489,39 @@ export function PdfRenderer({ source, options }: BaseRendererProps) {
       return undefined
     }
 
-    const availableWidth = Math.max(viewportSize.width - 32, 1)
-    const availableHeight = Math.max(viewportSize.height - 96, 1)
+    const availableWidth = Math.max(viewportSize.width - 24, 1)
+    const availableHeight = Math.max(viewportSize.height - 48, 1)
     return Math.min(availableWidth / pageSize.width, availableHeight / pageSize.height)
   }, [pageSize, viewportSize])
+  const renderedPageSize = useMemo(() => {
+    if (!pageSize || !pageScale) {
+      return undefined
+    }
+
+    return {
+      width: pageSize.width * pageScale,
+      height: pageSize.height * pageScale,
+    }
+  }, [pageScale, pageSize])
+  const renderedPageGap = 24
 
   const currentPageOcrHighlights = globalMatches
     .map((match, matchIndex) => ({ ...match, matchIndex }))
-    .filter((match) => match.source === "ocr" && match.pageNumber === currentPage && match.ocrWordIndex !== undefined)
+    .filter((match) => match.source === "ocr" && match.pageNumber === currentPage && match.itemIndex !== undefined)
 
   return (
     <Card
       className={
         slotClasses?.container ??
         options?.className ??
-        "group relative rounded-lg border border-slate-200 bg-white shadow-sm"
+        (isDark
+          ? "group relative rounded-lg border border-neutral-700 bg-neutral-800 text-neutral-100 shadow-sm"
+          : "group relative rounded-lg border border-slate-200 bg-white text-slate-950 shadow-sm")
       }
     >
       <ViewerOverlayControls
         source={source}
+        theme={theme}
         showDownload={allowDownload}
         showSearch={allowSearch}
         iconButtonClassName={slotClasses?.iconButton}
@@ -615,16 +534,16 @@ export function PdfRenderer({ source, options }: BaseRendererProps) {
         onSearchEnter={onSearchEnter}
         searchCounterText={globalMatches.length === 0 || activeMatchIndex < 0 ? `0/${globalMatches.length}` : `${activeMatchIndex + 1}/${globalMatches.length}`}
         showReset
-        resetDisabled={isCanvasReset}
-        onReset={resetCanvasView}
+        resetDisabled={zoomPan.isViewReset}
+        onReset={zoomPan.resetView}
         showPagination={numPages > 1}
         currentPage={currentPage}
         totalPages={numPages}
         onPreviousPage={() => {
-          changePage(currentPage - 1, -1)
+          changePage(currentPage - 1)
         }}
         onNextPage={() => {
-          changePage(currentPage + 1, 1)
+          changePage(currentPage + 1)
         }}
         onPageChange={(page) => {
           changePage(page)
@@ -634,7 +553,10 @@ export function PdfRenderer({ source, options }: BaseRendererProps) {
       <div
         ref={viewportRef}
         className={
-          slotClasses?.viewport ?? "h-[80vh] max-h-[80vh] overflow-hidden rounded-lg bg-slate-100 p-4"
+          slotClasses?.viewport ??
+          (isDark
+            ? "h-[80vh] max-h-[80vh] touch-none overscroll-contain overflow-hidden rounded-lg bg-neutral-700 p-4"
+            : "h-[80vh] max-h-[80vh] touch-none overscroll-contain overflow-hidden rounded-lg bg-slate-100 p-4")
         }
       >
         {ocrHint ? (
@@ -645,73 +567,63 @@ export function PdfRenderer({ source, options }: BaseRendererProps) {
         <Document
           file={source}
           onLoadSuccess={onLoadSuccess}
-          loading={<div className="p-4 text-sm">Loading PDF...</div>}
+          loading={<div className={isDark ? "p-4 text-sm text-neutral-300" : "p-4 text-sm text-slate-700"}>Loading PDF...</div>}
           className="h-full"
         >
           {numPages > 0 ? (
             <div className="relative flex h-full items-center justify-center">
               <div
-                ref={canvasRef}
+                ref={zoomPan.viewportRef}
                 className="relative h-full w-full touch-none overflow-hidden cursor-grab active:cursor-grabbing"
-                {...canvasHandlers}
+                {...zoomPan.handlers}
                 onWheel={onCanvasWheel}
               >
                 <div
                   className="absolute left-1/2 top-1/2 min-h-0 min-w-0 select-none"
-                  style={{ transform: `translate(calc(-50% + ${panOffset.x}px), calc(-50% + ${panOffset.y}px))` }}
+                  style={{ transform: `translate(calc(-50% + ${zoomPan.panOffset.x}px), calc(-50% + ${zoomPan.panOffset.y}px))` }}
                 >
                   <div
                     className="relative min-h-0 min-w-0 overflow-hidden shadow-sm"
-                    style={{ transform: `scale(${zoom})`, transformOrigin: "center" }}
+                    style={{
+                      width: renderedPageSize?.width,
+                      height: renderedPageSize?.height,
+                      transform: `scale(${zoomPan.zoom})`,
+                      transformOrigin: "center",
+                    }}
                   >
-                    {pageSlideTransition ? (
+                    {pagedNavigation.visiblePages.map((pageNumber) => (
                       <div
-                        className="absolute left-0 top-0 transition-transform ease-out will-change-transform"
+                        key={`page-${pageNumber}`}
+                        className={
+                          pagedNavigation.isScrolling
+                            ? pagedNavigation.snapActive
+                              ? "absolute left-0 top-0 transition-transform duration-200 ease-out will-change-transform"
+                              : "absolute left-0 top-0 will-change-transform"
+                            : "relative"
+                        }
                         style={{
-                          transitionDuration: `${pageSlideTransition.duration}ms`,
-                          transform: pageSlideActive
-                            ? `translateX(${-pageSlideTransition.direction * 112}%)`
-                            : "translateX(0%)",
+                          transform: pagedNavigation.isScrolling
+                            ? `translateY(${(pageNumber - pagedNavigation.scrollPosition) * ((renderedPageSize?.height ?? 0) + renderedPageGap)}px)`
+                            : "translateY(0)",
                         }}
                       >
                         <Page
-                          key={`page-${pageSlideTransition.fromPage}`}
-                          pageNumber={pageSlideTransition.fromPage}
+                          pageNumber={pageNumber}
                           scale={pageScale}
+                          loading={null}
                           renderTextLayer
                           renderAnnotationLayer
                           className={slotClasses?.page}
                           customTextRenderer={customTextRenderer}
+                          onLoadSuccess={(page) => setPageSize(page.getViewport({ scale: 1 }))}
+                          onGetTextSuccess={(textContent) => onPageTextSuccess(pageNumber, textContent as PdfTextContent)}
                         />
                       </div>
-                    ) : null}
-                    <div
-                      className={pageSlideTransition ? "transition-transform ease-out will-change-transform" : undefined}
-                      style={{
-                        transitionDuration: pageSlideTransition ? `${pageSlideTransition.duration}ms` : undefined,
-                        transform: pageSlideTransition
-                          ? pageSlideActive
-                            ? "translateX(0%)"
-                            : `translateX(${pageSlideTransition.direction * 112}%)`
-                          : "translateX(0%)",
-                      }}
-                    >
-                      <Page
-                        key={`page-${currentPage}`}
-                        pageNumber={currentPage}
-                        scale={pageScale}
-                        renderTextLayer
-                        renderAnnotationLayer
-                        className={slotClasses?.page}
-                        customTextRenderer={customTextRenderer}
-                        onLoadSuccess={(page) => setPageSize(page.getViewport({ scale: 1 }))}
-                        onGetTextSuccess={(textContent) => onPageTextSuccess(currentPage, textContent as PdfTextContent)}
-                      />
-                    </div>
-                    {!pageSlideTransition && currentPageOcrHighlights.length > 0 ? (
+                    ))}
+                    {!pagedNavigation.isScrolling && currentPageOcrHighlights.length > 0 ? (
                       <div className="pointer-events-none absolute inset-0 z-10">
                         {currentPageOcrHighlights.map((match) => {
-                          const word = ocrWordMap[currentPage]?.[match.ocrWordIndex ?? -1]
+                          const word = ocrWordMap[currentPage]?.[match.itemIndex ?? -1]
                           if (!word) {
                             return null
                           }
