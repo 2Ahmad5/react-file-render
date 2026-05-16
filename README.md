@@ -42,14 +42,72 @@ export function App() {
 
 ## Options
 
-- `interactive`: enables zoom/pan/search/pagination controls when supported; set `false` for static display mode
-- `allowDownload`: shows download control when `interactive` is enabled
-- `allowSearch`: enables search for searchable renderers (PDF, DOCX, images via OCR, code)
-- `theme`: `"light" | "dark"`
-- `documentSize`: `"small" | "normal" | "large" | "xlarge"`
-- `image`: `fit`, `repeat`, `position`, `backgroundColor`
-- `code`: `language`, `showLineNumbers`, `wrapLines`, `theme`
-- `byType`: per-file-type option overrides
+`FileRenderer` accepts an `options` object.
+
+- `interactive?: boolean`
+  - Default: `true`
+  - Turns renderer interactions on/off. When `false`, interactive controls are hidden and content is shown as static preview.
+
+- `allowDownload?: boolean`
+  - Default: `false`
+  - Shows download control for supported renderers, only when `interactive` is `true`.
+
+- `allowSearch?: boolean`
+  - Default: auto by renderer type
+  - Enables search in searchable renderers (`pdf`, `docx`, images via OCR, code files).
+
+- `theme?: "light" | "dark"`
+  - Default: `"light"`
+  - Applies the renderer control/theme palette.
+
+- `documentSize?: "small" | "normal" | "large" | "xlarge"`
+  - Default: `"normal"`
+  - Controls default viewport/document width for document-style renderers.
+
+- `className?: string`
+  - Optional root class override for renderer container.
+
+- `slotClasses?: { container, toolbar, iconButton, searchInput, viewport, image, page }`
+  - Optional class overrides for specific renderer UI regions.
+
+- `image?: { fit, repeat, position, backgroundColor }`
+  - `fit?: "contain" | "cover" | "fill" | "none" | "scale-down"` (default: `"cover"`)
+  - `repeat?: "no-repeat" | "repeat" | "repeat-x" | "repeat-y"` (default: `"no-repeat"`)
+  - `position?: string` (default: `"center"`, any valid CSS background-position)
+  - `backgroundColor?: string` (any valid CSS color)
+
+- `code?: { language, showLineNumbers, wrapLines, theme }`
+  - `language?: string` to force a syntax language instead of extension-based auto-detect
+  - `showLineNumbers?: boolean` (default: `true`)
+  - `wrapLines?: boolean` (default: `false`)
+  - `theme?: "github-light" | "github-dark" | "vitesse-light" | "vitesse-dark"`
+
+- `byType?: Partial<Record<SupportedFileType, RendererStyleOptions>>`
+  - Per-file-type option overrides.
+  - Useful when rendering mixed types with one shared config.
+
+Example with nested options:
+
+```tsx
+<FileRenderer
+  source="/test/sample.py"
+  fileType="py"
+  options={{
+    interactive: true,
+    allowDownload: true,
+    theme: "dark",
+    code: {
+      showLineNumbers: true,
+      wrapLines: true,
+      theme: "github-dark",
+    },
+    byType: {
+      pdf: { documentSize: "large", allowSearch: true },
+      png: { image: { fit: "contain", backgroundColor: "#0f172a" } },
+    },
+  }}
+/>
+```
 
 ## Local development
 
