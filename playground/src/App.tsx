@@ -2,6 +2,7 @@ import { useState } from "react";
 import { FileRenderer, type DocumentSize, type ImageFit, type ImageRepeat, type SupportedFileType } from "react-file-render";
 import { Input } from "../../src/components/ui/input";
 import { Label } from "../../src/components/ui/label";
+import { codeExtensionSet } from "../../src/renderers/code/codeLanguages";
 
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
@@ -17,6 +18,10 @@ function getFileType(path: string): SupportedFileType {
     return extension;
   }
 
+  if (extension && codeExtensionSet.has(extension)) {
+    return extension as SupportedFileType;
+  }
+
   return "image";
 }
 
@@ -26,11 +31,13 @@ function getFileLabel(path: string) {
 }
 
 const testFiles = Object.keys(testFileModules)
+  .filter((path) => getFileType(path) !== "image" || /\.(avif|jpe?g|png)$/i.test(path))
   .map<TestFile>((path) => ({
     label: getFileLabel(path),
     source: path.replace("../public", ""),
     fileType: getFileType(path),
   }))
+  .concat([{ label: "test folder", source: "/test/", fileType: "folder" }])
   .sort((a, b) => a.label.localeCompare(b.label));
 
 const imageFits = ["contain", "cover", "fill", "none", "scale-down"] satisfies ImageFit[];
@@ -42,13 +49,18 @@ export default function App() {
   const [source, setSource] = useState(testFiles[0].source);
   const [fileType, setFileType] = useState<SupportedFileType>(testFiles[0].fileType);
   const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [interactive, setInteractive] = useState(true);
   const [documentSize, setDocumentSize] = useState<DocumentSize>("normal");
   const [imageFit, setImageFit] = useState<ImageFit>("cover");
   const [imageRepeat, setImageRepeat] = useState<ImageRepeat>("no-repeat");
   const [imagePosition, setImagePosition] = useState("center");
+  const [codeLanguage, setCodeLanguage] = useState("");
+  const [codeLineNumbers, setCodeLineNumbers] = useState(true);
+  const [codeWrapLines, setCodeWrapLines] = useState(false);
 
   const isImage = fileType === "image" || fileType === "jpg" || fileType === "jpeg" || fileType === "png" || fileType === "avif";
   const isDocument = fileType === "pdf" || fileType === "docx";
+  const isCode = fileType === "code" || codeExtensionSet.has(fileType);
 
   function selectTestFile(index: number) {
     const testFile = testFiles[index];
@@ -91,6 +103,12 @@ export default function App() {
             <option value="png">png</option>
             <option value="avif">avif</option>
             <option value="image">image</option>
+            <option value="code">code</option>
+            <option value="tsx">tsx</option>
+            <option value="ts">ts</option>
+            <option value="js">js</option>
+            <option value="json">json</option>
+            <option value="md">md</option>
             <option value="folder">folder</option>
           </select>
         </label>
@@ -105,6 +123,11 @@ export default function App() {
             <option value="light">light</option>
             <option value="dark">dark</option>
           </select>
+        </label>
+
+        <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+          <input type="checkbox" checked={interactive} onChange={(event) => setInteractive(event.target.checked)} />
+          Interactive mode
         </label>
 
         {isDocument ? (
@@ -176,6 +199,30 @@ export default function App() {
             </div>
           </>
         ) : null}
+
+        {isCode ? (
+          <>
+            <div>
+              <Label className="block">Code language override</Label>
+              <Input
+                value={codeLanguage}
+                onChange={(event) => setCodeLanguage(event.target.value)}
+                className="mt-1 w-full rounded-md border bg-white px-3 py-2 text-sm"
+                placeholder="auto"
+              />
+            </div>
+
+            <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+              <input type="checkbox" checked={codeLineNumbers} onChange={(event) => setCodeLineNumbers(event.target.checked)} />
+              Line numbers
+            </label>
+
+            <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+              <input type="checkbox" checked={codeWrapLines} onChange={(event) => setCodeWrapLines(event.target.checked)} />
+              Wrap lines
+            </label>
+          </>
+        ) : null}
       </section>
 
       <section className="mt-6">
@@ -185,9 +232,15 @@ export default function App() {
           fileType={fileType}
           options={{
             allowDownload: true,
-            allowSearch: fileType === "pdf" || fileType === "docx" || isImage || fileType === "folder",
+            allowSearch: fileType === "pdf" || fileType === "docx" || isImage || isCode || fileType === "folder",
+            interactive,
             theme,
             documentSize,
+            code: {
+              language: codeLanguage || undefined,
+              showLineNumbers: codeLineNumbers,
+              wrapLines: codeWrapLines,
+            },
             image: {
               fit: imageFit,
               repeat: imageRepeat,

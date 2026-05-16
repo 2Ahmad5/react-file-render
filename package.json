@@ -1,7 +1,8 @@
 {
   "name": "react-file-render",
   "version": "0.1.0",
-  "private": true,
+  "description": "React file renderer for PDF, DOCX, images, code, and folder sources",
+  "license": "MIT",
   "type": "module",
   "main": "dist/index.cjs",
   "module": "dist/index.js",
@@ -15,6 +16,22 @@
   },
   "files": [
     "dist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/2Ahmad5/react-file-render.git"
+  },
+  "bugs": {
+    "url": "https://github.com/2Ahmad5/react-file-render/issues"
+  },
+  "homepage": "https://github.com/2Ahmad5/react-file-render#readme",
+  "keywords": [
+    "react",
+    "file-renderer",
+    "pdf",
+    "docx",
+    "image",
+    "code"
   ],
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts --external react,react-dom,react-pdf",
@@ -32,6 +49,7 @@
     "lucide-react": "^1.14.0",
     "pdfjs-dist": "^4.8.69",
     "react-pdf": "^9.1.1",
+    "shiki": "^4.0.2",
     "tesseract.js": "^7.0.0"
   },
   "devDependencies": {

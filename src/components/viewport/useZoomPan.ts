@@ -13,6 +13,7 @@ type PointerPoint = {
 type UseZoomPanOptions = {
   minZoom?: number
   maxZoom?: number
+  blockWheel?: boolean
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -23,7 +24,7 @@ function getDistance(a: PointerPoint, b: PointerPoint) {
   return Math.hypot(a.x - b.x, a.y - b.y)
 }
 
-export function useZoomPan({ minZoom = 0.75, maxZoom = 2.5 }: UseZoomPanOptions = {}) {
+export function useZoomPan({ minZoom = 0.75, maxZoom = 2.5, blockWheel = true }: UseZoomPanOptions = {}) {
   const [zoom, setZoom] = useState(1)
   const [panOffset, setPanOffset] = useState<PanOffset>({ x: 0, y: 0 })
   const viewportRef = useRef<HTMLDivElement | null>(null)
@@ -126,6 +127,10 @@ export function useZoomPan({ minZoom = 0.75, maxZoom = 2.5 }: UseZoomPanOptions 
     }
 
     function preventViewportGesture(event: Event) {
+      if (event.type === "wheel" && !blockWheel && !(event as globalThis.WheelEvent).ctrlKey) {
+        return
+      }
+
       event.preventDefault()
     }
 
@@ -140,7 +145,7 @@ export function useZoomPan({ minZoom = 0.75, maxZoom = 2.5 }: UseZoomPanOptions 
       viewport.removeEventListener("gesturechange", preventViewportGesture)
       viewport.removeEventListener("gestureend", preventViewportGesture)
     }
-  }, [viewportElement])
+  }, [blockWheel, viewportElement])
 
   return {
     viewportRef,

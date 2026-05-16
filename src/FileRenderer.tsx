@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react"
 import { ViewerOverlayControls } from "./components/ViewerOverlayControls"
 import { rendererRegistry } from "./registry"
+import { codeExtensionSet, isCodeFileType } from "./renderers/code/codeLanguages"
 import { UnsupportedRenderer } from "./renderers/fallback/UnsupportedRenderer"
-import type { BaseRendererProps, FileRendererProps, RendererOptions, SupportedFileType } from "./types"
+import type { FileRendererProps, RendererOptions, RendererStyleOptions, SupportedFileType } from "./types"
 
 type RenderableSource = {
   source: string
@@ -18,19 +19,40 @@ const renderableExtensions: Record<string, SupportedFileType> = {
   avif: "avif",
 }
 
+codeExtensionSet.forEach((extension) => {
+  renderableExtensions[extension] = extension as SupportedFileType
+})
+
 function getFileTypeFromSource(source: string) {
   const pathname = source.split(/[?#]/)[0]
   const extension = pathname.split(".").pop()?.toLowerCase()
   return extension ? renderableExtensions[extension] : undefined
 }
 
-function getNormalizedOptions(fileType: SupportedFileType, options?: RendererOptions) {
+function getMergedOptions(fileType: SupportedFileType, options?: RendererOptions): RendererStyleOptions {
+  const typeOverride = options?.byType?.[fileType]
+  const mergedOptions: RendererStyleOptions = {
+    ...options,
+    ...typeOverride,
+    image: {
+      ...options?.image,
+      ...typeOverride?.image,
+    },
+    slotClasses: {
+      ...options?.slotClasses,
+      ...typeOverride?.slotClasses,
+    },
+  }
+
   const isSearchableImage = fileType === "image" || fileType === "jpg" || fileType === "jpeg" || fileType === "png" || fileType === "avif"
-  const supportsSearch = fileType === "pdf" || fileType === "docx" || isSearchableImage
+  const isSearchableCode = isCodeFileType(fileType)
+  const supportsSearch = fileType === "pdf" || fileType === "docx" || isSearchableImage || isSearchableCode
+  const interactive = mergedOptions.interactive ?? true
 
   return {
-    ...options,
-    allowSearch: supportsSearch ? options?.allowSearch ?? isSearchableImage : false,
+    ...mergedOptions,
+    allowDownload: interactive ? mergedOptions.allowDownload : false,
+    allowSearch: interactive && supportsSearch ? mergedOptions.allowSearch ?? (isSearchableImage || isSearchableCode) : false,
   }
 }
 
@@ -95,9 +117,9 @@ async function loadFolderSources(folderSource: string) {
   return parseFolderManifest(folderSource, await manifestResponse.text())
 }
 
-function RenderSingleSource({ source, fileType, options }: BaseRendererProps & { fileType: SupportedFileType }) {
+function RenderSingleSource({ source, fileType, options }: { source: string; fileType: SupportedFileType; options?: RendererOptions }) {
   const Renderer = rendererRegistry[fileType]
-  const normalizedOptions = getNormalizedOptions(fileType, options)
+  const normalizedOptions = getMergedOptions(fileType, options)
 
   if (!Renderer) {
     return <UnsupportedRenderer source={source} options={normalizedOptions} />
@@ -165,7 +187,7 @@ export function FileRenderer({ source, fileType, options }: FileRendererProps) {
   return (
     <div className="group relative inline-block">
       <RenderSingleSource source={activeFolderSource.source} fileType={activeFolderSource.fileType} options={options} />
-      {folderSources.length > 1 ? (
+      {folderSources.length > 1 && (options?.interactive ?? true) ? (
         <ViewerOverlayControls
           source={activeFolderSource.source}
           theme={options?.theme}

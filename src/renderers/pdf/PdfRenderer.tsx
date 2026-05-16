@@ -73,6 +73,7 @@ export function PdfRenderer({ source, options }: BaseRendererProps) {
 
   const allowDownload = options?.allowDownload ?? false
   const allowSearch = options?.allowSearch ?? false
+  const interactive = options?.interactive ?? true
   const slotClasses = options?.slotClasses
   const theme = options?.theme ?? "light"
   const isDark = theme === "dark"
@@ -286,6 +287,10 @@ export function PdfRenderer({ source, options }: BaseRendererProps) {
   }
 
   function onCanvasWheel(event: WheelEvent<HTMLDivElement>) {
+    if (!interactive) {
+      return
+    }
+
     if (event.ctrlKey) {
       zoomPan.handlers.onWheel(event)
       return
@@ -462,39 +467,41 @@ export function PdfRenderer({ source, options }: BaseRendererProps) {
             }
       }
     >
-      <ViewerOverlayControls
-        source={source}
-        theme={theme}
-        compact={controlsCompact}
-        showDownload={allowDownload}
-        showSearch={allowSearch}
-        searchDisabled={searchDisabled}
-        iconButtonClassName={slotClasses?.iconButton}
-        searchInputClassName={slotClasses?.searchInput}
-        searchValue={searchQuery}
-        onSearchChange={(value) => {
-          setSearchQuery(value)
-          setActiveMatchIndex(value.trim() ? 0 : -1)
-        }}
-        onSearchEnter={onSearchEnter}
-        searchCounterText={globalMatches.length === 0 || activeMatchIndex < 0 ? `0/${globalMatches.length}` : `${activeMatchIndex + 1}/${globalMatches.length}`}
-        showReset
-        resetDisabled={zoomPan.isViewReset}
-        onReset={zoomPan.resetView}
-        showPagination={numPages > 1}
-        paginationPlacement="left-center"
-        currentPage={currentPage}
-        totalPages={numPages}
-        onPreviousPage={() => {
-          changePage(currentPage - 1)
-        }}
-        onNextPage={() => {
-          changePage(currentPage + 1)
-        }}
-        onPageChange={(page) => {
-          changePage(page)
-        }}
-      />
+      {interactive ? (
+        <ViewerOverlayControls
+          source={source}
+          theme={theme}
+          compact={controlsCompact}
+          showDownload={allowDownload}
+          showSearch={allowSearch}
+          searchDisabled={searchDisabled}
+          iconButtonClassName={slotClasses?.iconButton}
+          searchInputClassName={slotClasses?.searchInput}
+          searchValue={searchQuery}
+          onSearchChange={(value) => {
+            setSearchQuery(value)
+            setActiveMatchIndex(value.trim() ? 0 : -1)
+          }}
+          onSearchEnter={onSearchEnter}
+          searchCounterText={globalMatches.length === 0 || activeMatchIndex < 0 ? `0/${globalMatches.length}` : `${activeMatchIndex + 1}/${globalMatches.length}`}
+          showReset
+          resetDisabled={zoomPan.isViewReset}
+          onReset={zoomPan.resetView}
+          showPagination={numPages > 1}
+          paginationPlacement="left-center"
+          currentPage={currentPage}
+          totalPages={numPages}
+          onPreviousPage={() => {
+            changePage(currentPage - 1)
+          }}
+          onNextPage={() => {
+            changePage(currentPage + 1)
+          }}
+          onPageChange={(page) => {
+            changePage(page)
+          }}
+        />
+      ) : null}
 
       <div
         ref={viewport.setElementRef}
@@ -515,8 +522,8 @@ export function PdfRenderer({ source, options }: BaseRendererProps) {
             <div className="relative flex h-full items-center justify-center">
               <div
                 ref={zoomPan.setViewportRef}
-                className="relative h-full w-full touch-none overflow-hidden cursor-grab active:cursor-grabbing"
-                {...zoomPan.handlers}
+                className={interactive ? "relative h-full w-full touch-none overflow-hidden cursor-grab active:cursor-grabbing" : "relative h-full w-full touch-none overflow-hidden"}
+                {...(interactive ? zoomPan.handlers : {})}
                 onWheel={onCanvasWheel}
               >
                 <div

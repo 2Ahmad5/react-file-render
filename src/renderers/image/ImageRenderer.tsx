@@ -65,6 +65,7 @@ function getCssUrl(source: string) {
 }
 
 export function ImageRenderer({ source, options }: BaseRendererProps) {
+  const interactive = options?.interactive ?? true
   const allowDownload = options?.allowDownload ?? false
   const allowSearch = options?.allowSearch ?? true
   const theme = options?.theme ?? "light"
@@ -95,7 +96,7 @@ export function ImageRenderer({ source, options }: BaseRendererProps) {
   const searchDisabled = allowSearch && (ocrStatus === "idle" || ocrStatus === "running" || ocrStatus === "error" || (ocrStatus === "done" && ocrWords.length === 0))
 
   async function runImageOcr(image: HTMLImageElement) {
-    if (!allowSearch) {
+    if (!interactive || !allowSearch) {
       return
     }
 
@@ -169,6 +170,10 @@ export function ImageRenderer({ source, options }: BaseRendererProps) {
   }
 
   function onImageWheel(event: WheelEvent<HTMLDivElement>) {
+    if (!interactive) {
+      return
+    }
+
     event.preventDefault()
     event.stopPropagation()
 
@@ -200,23 +205,25 @@ export function ImageRenderer({ source, options }: BaseRendererProps) {
           : "group relative h-[80vh] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm")
       }
     >
-      <ViewerOverlayControls
-        source={source}
-        theme={theme}
-        showDownload={allowDownload}
-        showSearch={allowSearch}
-        searchDisabled={searchDisabled}
-        searchValue={searchQuery}
-        onSearchChange={(value) => {
-          setSearchQuery(value)
-          setActiveMatchIndex(value.trim() ? 0 : -1)
-        }}
-        onSearchEnter={() => activateMatch(activeMatchIndex < 0 ? 0 : activeMatchIndex + 1)}
-        searchCounterText={globalMatches.length === 0 || activeMatchIndex < 0 ? `0/${globalMatches.length}` : `${activeMatchIndex + 1}/${globalMatches.length}`}
-        showReset
-        resetDisabled={zoomPan.isViewReset}
-        onReset={zoomPan.resetView}
-      />
+      {interactive ? (
+        <ViewerOverlayControls
+          source={source}
+          theme={theme}
+          showDownload={allowDownload}
+          showSearch={allowSearch}
+          searchDisabled={searchDisabled}
+          searchValue={searchQuery}
+          onSearchChange={(value) => {
+            setSearchQuery(value)
+            setActiveMatchIndex(value.trim() ? 0 : -1)
+          }}
+          onSearchEnter={() => activateMatch(activeMatchIndex < 0 ? 0 : activeMatchIndex + 1)}
+          searchCounterText={globalMatches.length === 0 || activeMatchIndex < 0 ? `0/${globalMatches.length}` : `${activeMatchIndex + 1}/${globalMatches.length}`}
+          showReset
+          resetDisabled={zoomPan.isViewReset}
+          onReset={zoomPan.resetView}
+        />
+      ) : null}
 
       <div
         className={cn(
@@ -227,8 +234,11 @@ export function ImageRenderer({ source, options }: BaseRendererProps) {
       >
         <div
           ref={setViewportRef}
-          className="relative flex h-full w-full touch-none items-center justify-center overflow-hidden cursor-grab active:cursor-grabbing"
-          {...zoomPan.handlers}
+          className={cn(
+            "relative flex h-full w-full touch-none items-center justify-center overflow-hidden",
+            interactive ? "cursor-grab active:cursor-grabbing" : undefined,
+          )}
+          {...(interactive ? zoomPan.handlers : {})}
           onWheel={onImageWheel}
         >
           <div
@@ -240,7 +250,9 @@ export function ImageRenderer({ source, options }: BaseRendererProps) {
               backgroundPosition: position,
               backgroundRepeat: repeat,
               backgroundSize: repeat === "no-repeat" ? "100% 100%" : getBackgroundSize(fit, repeat),
-              transform: `translate(${zoomPan.panOffset.x}px, ${zoomPan.panOffset.y}px) scale(${zoomPan.zoom})`,
+               transform: interactive
+                 ? `translate(${zoomPan.panOffset.x}px, ${zoomPan.panOffset.y}px) scale(${zoomPan.zoom})`
+                 : "none",
               transformOrigin: "center",
             }}
           >
