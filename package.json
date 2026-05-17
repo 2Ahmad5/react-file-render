@@ -12,7 +12,8 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
-    }
+    },
+    "./styles.css": "./dist/styles.css"
   },
   "files": [
     "dist"
@@ -34,7 +35,8 @@
     "code"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --dts --external react,react-dom,react-pdf",
+    "build": "npm run build:css && tsup src/index.ts --format esm,cjs --dts --external react,react-dom,react-pdf",
+    "build:css": "tailwindcss -c tailwind.config.js -i src/styles.css -o dist/styles.css --minify",
     "dev": "tsup src/index.ts --format esm,cjs --dts --watch --external react,react-dom,react-pdf",
     "playground": "npm --prefix playground run dev",
     "playground:install": "npm --prefix playground install",
@@ -55,6 +57,9 @@
   "devDependencies": {
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.41",
+    "tailwindcss": "^3.4.10",
     "tsup": "^8.2.4",
     "typescript": "^5.6.3"
   }

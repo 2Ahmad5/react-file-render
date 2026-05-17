@@ -20,8 +20,7 @@ npm install react-file-render
 
 ```tsx
 import { FileRenderer } from "react-file-render"
-import "react-pdf/dist/Page/AnnotationLayer.css"
-import "react-pdf/dist/Page/TextLayer.css"
+import "react-file-render/styles.css"
 
 export function App() {
   return (
